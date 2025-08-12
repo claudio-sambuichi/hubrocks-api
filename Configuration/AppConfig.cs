@@ -3,6 +3,7 @@ namespace HubRocksApi.Configuration
     public class AppConfig
     {
         public ApiConfig Api { get; set; } = new();
+        public List<string> AllowedOrigins { get; set; } = new();
     }
 
     public class ApiConfig

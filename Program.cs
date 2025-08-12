@@ -1,5 +1,6 @@
 using HubRocksApi.Services;
 using HubRocksApi.Configuration;
+using HubRocksApi.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,18 +18,58 @@ builder.Services.Configure<AppConfig>(builder.Configuration.GetSection("AppConfi
 // Register services
 builder.Services.AddScoped<ICourseService, CourseService>();
 
-// Add CORS
+// Add CORS with origin checking
+var appConfig = builder.Configuration.GetSection("AppConfig").Get<AppConfig>();
+
+// Get allowed origins from configuration or environment variable
+var allowedOrigins = new List<string>();
+
+// Check environment variable first (comma-separated list)
+var envOrigins = Environment.GetEnvironmentVariable("ALLOWED_ORIGINS");
+if (!string.IsNullOrEmpty(envOrigins))
+{
+    allowedOrigins.AddRange(envOrigins.Split(',', StringSplitOptions.RemoveEmptyEntries)
+        .Select(origin => origin.Trim()));
+}
+// Fallback to configuration
+else if (appConfig?.AllowedOrigins?.Any() == true)
+{
+    allowedOrigins.AddRange(appConfig.AllowedOrigins);
+}
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll", policy =>
+    options.AddPolicy("AllowedOrigins", policy =>
     {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
+        if (allowedOrigins.Any())
+        {
+            policy.WithOrigins(allowedOrigins.ToArray())
+                  .AllowAnyMethod()
+                  .AllowAnyHeader()
+                  .AllowCredentials();
+        }
+        else
+        {
+            // Fallback to allow any origin if no specific origins are configured
+            policy.AllowAnyOrigin()
+                  .AllowAnyMethod()
+                  .AllowAnyHeader();
+        }
     });
 });
 
 var app = builder.Build();
+
+// Log allowed origins for debugging
+var logger = app.Services.GetRequiredService<ILogger<Program>>();
+if (allowedOrigins.Any())
+{
+    logger.LogInformation("CORS configured with allowed origins: {Origins}", string.Join(", ", allowedOrigins));
+}
+else
+{
+    logger.LogWarning("CORS configured to allow any origin (not recommended for production)");
+}
 
 // Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())
@@ -38,7 +79,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-app.UseCors("AllowAll");
+app.UseMiddleware<OriginValidationMiddleware>();
+app.UseCors("AllowedOrigins");
 app.UseAuthorization();
 app.MapControllers();
 
