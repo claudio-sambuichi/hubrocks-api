@@ -1,6 +1,7 @@
 using HubRocksApi.Services;
 using HubRocksApi.Configuration;
 using HubRocksApi.Middleware;
+using Microsoft.AspNetCore.OutputCaching;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -12,6 +13,20 @@ if (!string.IsNullOrEmpty(baseUrlFromEnv))
     builder.Configuration["AppConfig:Api:BaseUrl"] = baseUrlFromEnv;
 }
 
+// Override BaseUrl from environment if provided BEFORE binding options
+var cacheTtlSecondsFromEnv = Environment.GetEnvironmentVariable("CACHE_TTL_SECONDS");
+if (!string.IsNullOrEmpty(cacheTtlSecondsFromEnv))
+{
+    builder.Configuration["AppConfig:CACHE_TTL_SECONDS"] = cacheTtlSecondsFromEnv;
+}
+
+// Override ApiKey from environment if provided BEFORE binding options
+var apiKeyFromEnv = Environment.GetEnvironmentVariable("API_KEY");
+if (!string.IsNullOrEmpty(apiKeyFromEnv))
+{
+    builder.Configuration["AppConfig:Api:ApiKey"] = apiKeyFromEnv;
+}
+
 // Add services to the container
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -19,6 +34,16 @@ builder.Services.AddSwaggerGen();
 
 // Configure HTTP client
 builder.Services.AddHttpClient();
+builder.Services.AddMemoryCache();
+
+// Output caching
+builder.Services.AddOutputCache(options =>
+{
+    options.AddPolicy("CoursesPolicy", policy =>
+        policy.Expire(TimeSpan.FromSeconds(60))
+              .SetVaryByHeader("ie_id")
+              .SetVaryByHeader("couponId"));
+});
 
 // Configure app settings
 builder.Services.Configure<AppConfig>(builder.Configuration.GetSection("AppConfig"));
@@ -95,6 +120,7 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseMiddleware<OriginValidationMiddleware>();
 app.UseCors("AllowedOrigins");
+app.UseOutputCache();
 app.UseAuthorization();
 app.MapControllers();
 

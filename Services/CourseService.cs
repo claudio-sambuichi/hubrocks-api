@@ -1,6 +1,7 @@
 using HubRocksApi.Configuration;
 using HubRocksApi.Models;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Caching.Memory;
 using Newtonsoft.Json;
 using System.Text;
 
@@ -11,15 +12,33 @@ namespace HubRocksApi.Services
         private readonly HttpClient _httpClient;
         private readonly AppConfig _config;
         private readonly ILogger<CourseService> _logger;
+        private readonly IMemoryCache _memoryCache;
+        private readonly TimeSpan _cacheDuration;
 
         public CourseService(
             HttpClient httpClient, 
             IOptions<AppConfig> config, 
-            ILogger<CourseService> logger)
+            ILogger<CourseService> logger,
+            IMemoryCache memoryCache)
         {
             _httpClient = httpClient;
             _config = config.Value;
             _logger = logger;
+            _memoryCache = memoryCache;
+
+            // Configure cache duration with env override
+            // Priority: CACHE_TTL_SECONDS -> default 300 seconds
+            var defaultSeconds = 300; // 5 minutes
+            var ttlSeconds = defaultSeconds;
+            var cacheTtlSeconds = _config.CacheTtlSeconds;
+
+            if (!string.IsNullOrEmpty(cacheTtlSeconds) && int.TryParse(cacheTtlSeconds, out var parsedSeconds) && parsedSeconds > 0)
+            {
+                ttlSeconds = parsedSeconds;
+            }
+
+            _cacheDuration = TimeSpan.FromSeconds(ttlSeconds);
+            _logger.LogInformation("In-memory cache TTL configured to {Seconds} seconds", ttlSeconds);
         }
 
         public async Task<List<Course>> GetCoursesAsync(int? institutionId = null, string? couponId = null)
@@ -28,7 +47,23 @@ namespace HubRocksApi.Services
             {
                 // Use provided institution ID or default to 1
                 var effectiveInstitutionId = institutionId ?? 1;
-                return await FetchCoursesForInstitutionAsync(effectiveInstitutionId, couponId);
+                var cacheKey = $"courses:{effectiveInstitutionId}:{couponId ?? "_"}";
+
+                if (_memoryCache.TryGetValue(cacheKey, out List<Course>? cached))
+                {
+                    _logger.LogInformation("Cache hit for {CacheKey}", cacheKey);
+                    return cached!;
+                }
+
+                _logger.LogInformation("Cache miss for {CacheKey}", cacheKey);
+                var courses = await FetchCoursesForInstitutionAsync(effectiveInstitutionId, couponId);
+
+                var cacheEntryOptions = new MemoryCacheEntryOptions()
+                    .SetAbsoluteExpiration(_cacheDuration)
+                    .SetSize(courses.Count == 0 ? 1 : Math.Min(courses.Count, 1000));
+
+                _memoryCache.Set(cacheKey, courses, cacheEntryOptions);
+                return courses;
             }
             catch (Exception ex)
             {

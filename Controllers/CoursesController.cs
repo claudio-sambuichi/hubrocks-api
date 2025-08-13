@@ -1,6 +1,7 @@
 using HubRocksApi.Models;
 using HubRocksApi.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.OutputCaching;
 
 namespace HubRocksApi.Controllers
 {
@@ -24,6 +25,7 @@ namespace HubRocksApi.Controllers
         /// <param name="couponId">Coupon ID from couponId header (optional)</param>
         /// <returns>List of courses from API</returns>
         [HttpGet]
+        [OutputCache(PolicyName = "CoursesPolicy")]
         public async Task<ActionResult<List<Course>>> GetCourses(
             [FromHeader(Name = "ie_id")] int? institutionId,
             [FromHeader(Name = "couponId")] string? couponId)
