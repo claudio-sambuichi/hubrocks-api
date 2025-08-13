@@ -85,6 +85,7 @@ namespace HubRocksApi.Services
                 while (hasNextPage)
                 {
                     _logger.LogInformation("Fetching page {Page} for institution {InstitutionId}", currentPage, institutionId);
+                    _logger.LogInformation("API KEY: {KEY}", apiKey);
 
                     var uriBuilder = new UriBuilder($"{baseUrl}/api/vitrine/itens");
                     var query = new StringBuilder();
