@@ -1,8 +1,16 @@
 using HubRocksApi.Services;
 using HubRocksApi.Configuration;
 using HubRocksApi.Middleware;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Override BaseUrl from environment if provided BEFORE binding options
+var baseUrlFromEnv = Environment.GetEnvironmentVariable("BASE_URL");
+if (!string.IsNullOrEmpty(baseUrlFromEnv))
+{
+    builder.Configuration["AppConfig:Api:BaseUrl"] = baseUrlFromEnv;
+}
 
 // Add services to the container
 builder.Services.AddControllers();
@@ -37,12 +45,7 @@ else if (appConfig?.AllowedOrigins?.Any() == true)
     allowedOrigins.AddRange(appConfig.AllowedOrigins);
 }
 
-// Set base url from environment variable
-var envBaseUrl = Environment.GetEnvironmentVariable("BASE_URL");
-if (!string.IsNullOrEmpty(envBaseUrl))
-{
-    appConfig.Api.BaseUrl = envBaseUrl;
-}
+// BaseUrl override is handled above via builder.Configuration
 
 builder.Services.AddCors(options =>
 {
@@ -77,6 +80,10 @@ else
 {
     logger.LogWarning("CORS configured to allow any origin (not recommended for production)");
 }
+
+// Log final API BaseUrl being used (after DI options binding)
+var resolvedOptions = app.Services.GetRequiredService<IOptions<AppConfig>>().Value;
+logger.LogInformation("API BaseUrl in use: {BaseUrl}", resolvedOptions.Api.BaseUrl);
 
 // Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())
