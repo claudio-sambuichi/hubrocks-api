@@ -45,7 +45,7 @@ namespace HubRocksApi.Middleware
             }
 
             // Get the Origin header
-            var origin = context.Request.Headers["Host"].FirstOrDefault();
+            var origin = context.Request.Headers["Origin"].FirstOrDefault();
 
             // Validate origin against allowed list
             if (string.IsNullOrEmpty(origin) || !_allowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase))
