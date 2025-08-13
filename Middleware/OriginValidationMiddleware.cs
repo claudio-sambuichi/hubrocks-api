@@ -48,7 +48,7 @@ namespace HubRocksApi.Middleware
             var origin = context.Request.Headers["Origin"].FirstOrDefault();
 
             // Validate origin against allowed list
-            if (string.IsNullOrEmpty(origin) || !_allowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase))
+            if (!string.IsNullOrEmpty(origin) || !_allowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase))
             {
                 _logger.LogWarning("Blocked request from unauthorized origin: {Origin}. Allowed origins: {AllowedOrigins}", 
                     origin, string.Join(", ", _allowedOrigins));
