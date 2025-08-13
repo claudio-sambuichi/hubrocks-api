@@ -37,6 +37,13 @@ else if (appConfig?.AllowedOrigins?.Any() == true)
     allowedOrigins.AddRange(appConfig.AllowedOrigins);
 }
 
+// Set base url from environment variable
+var envBaseUrl = Environment.GetEnvironmentVariable("BASE_URL");
+if (!string.IsNullOrEmpty(envBaseUrl))
+{
+    appConfig.Api.BaseUrl = envBaseUrl;
+}
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowedOrigins", policy =>
