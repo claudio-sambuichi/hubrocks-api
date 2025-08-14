@@ -38,7 +38,15 @@ namespace HubRocksApi.Services
             }
 
             _cacheDuration = TimeSpan.FromSeconds(ttlSeconds);
-            _logger.LogInformation("In-memory cache TTL configured to {Seconds} seconds", ttlSeconds);
+            
+            if (_config.CachingEnabled)
+            {
+                _logger.LogInformation("In-memory cache TTL configured to {Seconds} seconds", ttlSeconds);
+            }
+            else
+            {
+                _logger.LogInformation("Caching is disabled - all requests will fetch fresh data");
+            }
         }
 
         public async Task<List<Course>> GetCoursesAsync(int? institutionId = null, string? couponId = null)
@@ -49,20 +57,34 @@ namespace HubRocksApi.Services
                 var effectiveInstitutionId = institutionId ?? 1;
                 var cacheKey = $"courses:{effectiveInstitutionId}:{couponId ?? "_"}";
 
-                if (_memoryCache.TryGetValue(cacheKey, out List<Course>? cached))
+                // Check if caching is enabled before attempting to use cache
+                if (_config.CachingEnabled)
                 {
-                    _logger.LogInformation("Cache hit for {CacheKey}", cacheKey);
-                    return cached!;
+                    if (_memoryCache.TryGetValue(cacheKey, out List<Course>? cached))
+                    {
+                        _logger.LogInformation("Cache hit for {CacheKey}", cacheKey);
+                        return cached!;
+                    }
+
+                    _logger.LogInformation("Cache miss for {CacheKey}", cacheKey);
+                }
+                else
+                {
+                    _logger.LogInformation("Caching disabled, fetching fresh data for institution {InstitutionId}", effectiveInstitutionId);
                 }
 
-                _logger.LogInformation("Cache miss for {CacheKey}", cacheKey);
                 var courses = await FetchCoursesForInstitutionAsync(effectiveInstitutionId, couponId);
 
-                var cacheEntryOptions = new MemoryCacheEntryOptions()
-                    .SetAbsoluteExpiration(_cacheDuration)
-                    .SetSize(courses.Count == 0 ? 1 : Math.Min(courses.Count, 1000));
+                // Only cache if caching is enabled
+                if (_config.CachingEnabled)
+                {
+                    var cacheEntryOptions = new MemoryCacheEntryOptions()
+                        .SetAbsoluteExpiration(_cacheDuration)
+                        .SetSize(courses.Count == 0 ? 1 : Math.Min(courses.Count, 1000));
 
-                _memoryCache.Set(cacheKey, courses, cacheEntryOptions);
+                    _memoryCache.Set(cacheKey, courses, cacheEntryOptions);
+                }
+
                 return courses;
             }
             catch (Exception ex)
@@ -102,7 +124,12 @@ namespace HubRocksApi.Services
                     var request = new HttpRequestMessage(HttpMethod.Get, uriBuilder.Uri);
                     request.Headers.Add("X-Api-Key", apiKey);
                     request.Headers.Add("ie_id", institutionId.ToString());
-                    request.Headers.Add("limit", "20");
+                    var limitToSend = "20";
+                    if (!string.IsNullOrWhiteSpace(_config.Api.PageSize) && int.TryParse(_config.Api.PageSize, out var parsedLimit) && parsedLimit > 0)
+                    {
+                        limitToSend = parsedLimit.ToString();
+                    }
+                    request.Headers.Add("limit", limitToSend);
                     request.Headers.Add("page", currentPage.ToString());
 
                     var response = await _httpClient.SendAsync(request);

@@ -10,6 +10,7 @@ A .NET 8 Web API that aggregates courses from multiple educational institutions 
 - **RESTful API**: Clean REST endpoints for courses and institutions
 - **Swagger Documentation**: Built-in API documentation
 - **Logging**: Comprehensive logging throughout the application
+- **Caching**: Output caching (per-request) and in-memory response caching with configurable TTL
 
 ## API Endpoints
 
@@ -39,14 +40,14 @@ A .NET 8 Web API that aggregates courses from multiple educational institutions 
 
 ## Configuration
 
-Update `appsettings.json` to configure the API:
+Update `appsettings.json` to configure the API (prefer environment variables for secrets like API keys):
 
 ```json
 {
   "AppConfig": {
     "Api": {
       "BaseUrl": "https://your-api-base-url.com",
-      "ApiKey": "your-api-key-here"
+      "ApiKey": "" // Set via environment variable `API_KEY`
     },
     "AllowedOrigins": [
       "https://yourdomain.com",
@@ -59,19 +60,63 @@ Update `appsettings.json` to configure the API:
 ### Configuration Options
 
 - `Api.BaseUrl`: Base URL for the external API
-- `Api.ApiKey`: API key for authentication
+- `Api.ApiKey`: API key for authentication (recommended: set via environment variable)
+- `Api.PageSize`: Page size sent via `limit` header to the external API (optional; default 20)
 - `AllowedOrigins`: Array of allowed origin domains for CORS (optional)
+- `CachingEnabled`: Whether to enable output caching (optional; default true)
+- `CacheTtlSeconds`: In-memory cache TTL in seconds (optional; default 300)
 
 ### Environment Variables
 
 For deployment flexibility, you can override configuration using environment variables:
 
+- `API_KEY`: API key used for external API calls (overrides `AppConfig:Api:ApiKey`)
+- `LIMIT`: Overrides the `limit` header value sent to the external API (overrides `AppConfig:Api:PageSize`)
+- `BASE_URL`: External API base URL (overrides `AppConfig:Api:BaseUrl`)
+- `CACHING_ENABLED`: Whether to enable output caching (overrides `AppConfig:CachingEnabled`; accepts "true"/"false"; default true)
+- `CACHE_TTL_SECONDS`: TTL (in seconds) for in-memory caching of course lists (overrides `AppConfig:CacheTtlSeconds`; default 300)
 - `ALLOWED_ORIGINS`: Comma-separated list of allowed origins (e.g., "https://domain1.com,https://domain2.com")
 
 **Example:**
 ```bash
-ALLOWED_ORIGINS="https://prod.example.com,https://staging.example.com"
+# Windows PowerShell
+$env:API_KEY = "<your-key>"
+$env:BASE_URL = "https://api.example.com"
+$env:CACHING_ENABLED = "true"
+$env:CACHE_TTL_SECONDS = "300"
+$env:ALLOWED_ORIGINS = "https://prod.example.com,https://staging.example.com"
+
+# Linux/macOS/WSL
+export API_KEY="<your-key>"
+export BASE_URL="https://api.example.com"
+export CACHING_ENABLED="true"
+export CACHE_TTL_SECONDS="300"
+export ALLOWED_ORIGINS="https://prod.example.com,https://staging.example.com"
 ```
+
+## Caching
+
+The API uses two complementary caching layers to improve performance and reduce load on the upstream API:
+
+### 1) Output Caching (per-request response cache)
+- Enabled on `GET /api/courses` via a policy named `CoursesPolicy` (configurable via `CACHING_ENABLED`)
+- **Expiration**: 60 seconds
+- **Vary-By Headers**: `ie_id`, `couponId`
+- Effect: identical requests (same headers) within 60 seconds are served from an output cache without re-executing the action
+- **Configuration**: Can be disabled by setting `CACHING_ENABLED=false` or `AppConfig:CachingEnabled=false`
+
+### 2) In-Memory Caching (upstream data cache)
+- The service caches the fetched course list in memory (configurable via `CACHING_ENABLED`)
+- **Cache Key**: `courses:{ie_id}:{couponId or _}`
+- **TTL**: Configurable via `CacheTtlSeconds` (default 300s); can be overridden by `CACHE_TTL_SECONDS`
+- Effect: reduces repeated calls to the external API across requests
+- **Configuration**: Can be disabled by setting `CACHING_ENABLED=false` or `AppConfig:CachingEnabled=false`
+
+Notes:
+- Output caching is per HTTP response, while in-memory caching de-duplicates upstream fetches across requests
+- Both caching layers are controlled by the same `CACHING_ENABLED` setting
+- To adjust only the in-memory cache duration, set `CACHE_TTL_SECONDS`
+- When caching is disabled, all requests will fetch fresh data from the external API
 
 ## Running the Application
 

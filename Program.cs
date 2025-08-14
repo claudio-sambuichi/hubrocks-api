@@ -13,11 +13,21 @@ if (!string.IsNullOrEmpty(baseUrlFromEnv))
     builder.Configuration["AppConfig:Api:BaseUrl"] = baseUrlFromEnv;
 }
 
-// Override BaseUrl from environment if provided BEFORE binding options
+// Override CacheTtlSeconds from environment if provided BEFORE binding options
 var cacheTtlSecondsFromEnv = Environment.GetEnvironmentVariable("CACHE_TTL_SECONDS");
 if (!string.IsNullOrEmpty(cacheTtlSecondsFromEnv))
 {
-    builder.Configuration["AppConfig:CACHE_TTL_SECONDS"] = cacheTtlSecondsFromEnv;
+    builder.Configuration["AppConfig:CacheTtlSeconds"] = cacheTtlSecondsFromEnv;
+}
+
+// Override CachingEnabled from environment if provided BEFORE binding options
+var cachingEnabledFromEnv = Environment.GetEnvironmentVariable("CACHING_ENABLED");
+if (!string.IsNullOrEmpty(cachingEnabledFromEnv))
+{
+    if (bool.TryParse(cachingEnabledFromEnv, out bool cachingEnabled))
+    {
+        builder.Configuration["AppConfig:CachingEnabled"] = cachingEnabled.ToString();
+    }
 }
 
 // Override ApiKey from environment if provided BEFORE binding options
@@ -25,6 +35,13 @@ var apiKeyFromEnv = Environment.GetEnvironmentVariable("API_KEY");
 if (!string.IsNullOrEmpty(apiKeyFromEnv))
 {
     builder.Configuration["AppConfig:Api:ApiKey"] = apiKeyFromEnv;
+}
+
+// Override page size header value from environment if provided BEFORE binding options
+var limitFromEnv = Environment.GetEnvironmentVariable("LIMIT");
+if (!string.IsNullOrEmpty(limitFromEnv))
+{
+    builder.Configuration["AppConfig:Api:PageSize"] = limitFromEnv;
 }
 
 // Add services to the container
@@ -36,17 +53,23 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
 
-// Output caching
-builder.Services.AddOutputCache(options =>
-{
-    options.AddPolicy("CoursesPolicy", policy =>
-        policy.Expire(TimeSpan.FromSeconds(60))
-              .SetVaryByHeader("ie_id")
-              .SetVaryByHeader("couponId"));
-});
-
 // Configure app settings
 builder.Services.Configure<AppConfig>(builder.Configuration.GetSection("AppConfig"));
+
+// Get app config for conditional caching setup
+var appConfigForCaching = builder.Configuration.GetSection("AppConfig").Get<AppConfig>();
+
+// Output caching - only add if enabled
+if (appConfigForCaching?.CachingEnabled == true)
+{
+    builder.Services.AddOutputCache(options =>
+    {
+        options.AddPolicy("CoursesPolicy", policy =>
+            policy.Expire(TimeSpan.FromSeconds(60))
+                  .SetVaryByHeader("ie_id")
+                  .SetVaryByHeader("couponId"));
+    });
+}
 
 // Register services
 builder.Services.AddScoped<ICourseService, CourseService>();
@@ -109,6 +132,7 @@ else
 // Log final API BaseUrl being used (after DI options binding)
 var resolvedOptions = app.Services.GetRequiredService<IOptions<AppConfig>>().Value;
 logger.LogInformation("API BaseUrl in use: {BaseUrl}", resolvedOptions.Api.BaseUrl);
+logger.LogInformation("Caching enabled: {CachingEnabled}", resolvedOptions.CachingEnabled);
 
 // Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())
@@ -120,7 +144,13 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseMiddleware<OriginValidationMiddleware>();
 app.UseCors("AllowedOrigins");
-app.UseOutputCache();
+
+// Use output cache middleware only if caching is enabled
+if (resolvedOptions.CachingEnabled)
+{
+    app.UseOutputCache();
+}
+
 app.UseAuthorization();
 app.MapControllers();
 
