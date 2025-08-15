@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Caching.Memory;
 using Newtonsoft.Json;
 using System.Text;
+using System.Globalization;
 
 namespace HubRocksApi.Services
 {
@@ -134,8 +135,8 @@ namespace HubRocksApi.Services
                         category = apiCourse.Category,
                         thumb = apiCourse.Thumb,
                         link = apiCourse.Link,
-                        price = decimal.TryParse(apiCourse.Price, out decimal price) ? price : 0,
-                        old_price = decimal.TryParse(apiCourse.OldPrice, out decimal oldPrice) ? oldPrice : 0
+                        price = ParsePrice(apiCourse.Price),
+                        old_price = ParsePrice(apiCourse.OldPrice)
                     }).ToList();
 
                     allCourses.AddRange(coursesFromPage);
@@ -152,6 +153,30 @@ namespace HubRocksApi.Services
                 _logger.LogError(ex, "Error fetching courses for institution {InstitutionId} at page {Page}", institutionId, currentPage);
                 return allCourses; // Return whatever we've collected so far
             }
+        }
+
+        private decimal ParsePrice(string priceString)
+        {
+            if (string.IsNullOrWhiteSpace(priceString))
+            {
+                return 0m;
+            }
+
+            // Try parsing with invariant culture first (uses period as decimal separator)
+            if (decimal.TryParse(priceString, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal result))
+            {
+                return result;
+            }
+
+            // Fallback to current culture
+            if (decimal.TryParse(priceString, out result))
+            {
+                return result;
+            }
+
+            // If all parsing fails, log warning and return 0
+            _logger.LogWarning("Failed to parse price: {PriceString}", priceString);
+            return 0m;
         }
     }
 }

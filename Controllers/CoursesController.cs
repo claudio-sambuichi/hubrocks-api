@@ -24,7 +24,7 @@ namespace HubRocksApi.Controllers
         /// <param name="institutionId">Institution ID from ie_id header (required)</param>
         /// <param name="couponId">Coupon ID from couponId header (optional)</param>
         /// <returns>List of courses from API</returns>
-        [HttpGet]
+        [HttpPost]
         [OutputCache(PolicyName = "CoursesPolicy")]
         public async Task<ActionResult<List<Course>>> GetCourses(
             [FromHeader(Name = "ie_id")] int? institutionId,
