@@ -38,42 +38,24 @@ namespace HubRocksApi.Services
             }
 
             _cacheDuration = TimeSpan.FromSeconds(ttlSeconds);
-            
-            if (_config.CachingEnabled)
-            {
-                _logger.LogInformation("In-memory cache TTL configured to {Seconds} seconds", ttlSeconds);
-            }
-            else
-            {
-                _logger.LogInformation("Caching is disabled - all requests will fetch fresh data");
-            }
         }
 
-        public async Task<List<Course>> GetCoursesAsync(int? institutionId = null, string? couponId = null)
+        public async Task<List<Course>> GetCoursesAsync(int institutionId, string? couponId = null)
         {
             try
             {
-                // Use provided institution ID or default to 1
-                var effectiveInstitutionId = institutionId ?? 1;
-                var cacheKey = $"courses:{effectiveInstitutionId}:{couponId ?? "_"}";
+                var cacheKey = $"courses:{institutionId}:{couponId ?? "_"}";
 
                 // Check if caching is enabled before attempting to use cache
                 if (_config.CachingEnabled)
                 {
                     if (_memoryCache.TryGetValue(cacheKey, out List<Course>? cached))
                     {
-                        _logger.LogInformation("Cache hit for {CacheKey}", cacheKey);
                         return cached!;
                     }
-
-                    _logger.LogInformation("Cache miss for {CacheKey}", cacheKey);
-                }
-                else
-                {
-                    _logger.LogInformation("Caching disabled, fetching fresh data for institution {InstitutionId}", effectiveInstitutionId);
                 }
 
-                var courses = await FetchCoursesForInstitutionAsync(effectiveInstitutionId, couponId);
+                var courses = await FetchCoursesForInstitutionAsync(institutionId, couponId);
 
                 // Only cache if caching is enabled
                 if (_config.CachingEnabled)
@@ -106,16 +88,12 @@ namespace HubRocksApi.Services
             {
                 while (hasNextPage)
                 {
-                    _logger.LogInformation("Fetching page {Page} for institution {InstitutionId}", currentPage, institutionId);
-                    _logger.LogInformation("API KEY: {KEY}", apiKey);
-
                     var uriBuilder = new UriBuilder($"{baseUrl}/api/vitrine/itens");
                     var query = new StringBuilder();
 
                     // Add query parameters based on the integration file
                     if (!string.IsNullOrEmpty(couponId))
                     {
-                        _logger.LogInformation("Coupon ID: {CouponId}", couponId);
                         query.Append($"coupon={couponId}");
                     }
 
@@ -156,8 +134,8 @@ namespace HubRocksApi.Services
                         category = apiCourse.Category,
                         thumb = apiCourse.Thumb,
                         link = apiCourse.Link,
-                        price = apiCourse.Price,
-                        old_price = apiCourse.OldPrice
+                        price = decimal.TryParse(apiCourse.Price, out decimal price) ? price : 0,
+                        old_price = decimal.TryParse(apiCourse.OldPrice, out decimal oldPrice) ? oldPrice : 0
                     }).ToList();
 
                     allCourses.AddRange(coursesFromPage);
@@ -165,12 +143,8 @@ namespace HubRocksApi.Services
                     // Check if there's a next page
                     hasNextPage = data.Metadata?.HasNextPage ?? false;
                     currentPage++;
-
-                    _logger.LogInformation("Page {Page} fetched {Count} courses. HasNextPage: {HasNextPage}", 
-                        currentPage - 1, coursesFromPage.Count, hasNextPage);
                 }
 
-                _logger.LogInformation("Completed fetching all pages. Total courses: {TotalCount}", allCourses.Count);
                 return allCourses;
             }
             catch (Exception ex)

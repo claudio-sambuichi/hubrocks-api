@@ -9,7 +9,7 @@ namespace HubRocksApi.Models
         public string type { get; set; } = string.Empty;
         public string thumb { get; set; } = string.Empty;
         public string link { get; set; } = string.Empty;
-        public string price { get; set; }
-        public string old_price { get; set; }
+        public decimal price { get; set; }
+        public decimal old_price { get; set; }
     }
 }

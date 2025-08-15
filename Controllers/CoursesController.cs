@@ -21,7 +21,7 @@ namespace HubRocksApi.Controllers
         /// <summary>
         /// Get all courses from external API
         /// </summary>
-        /// <param name="institutionId">Institution ID from ie_id header (optional)</param>
+        /// <param name="institutionId">Institution ID from ie_id header (required)</param>
         /// <param name="couponId">Coupon ID from couponId header (optional)</param>
         /// <returns>List of courses from API</returns>
         [HttpGet]
@@ -30,16 +30,20 @@ namespace HubRocksApi.Controllers
             [FromHeader(Name = "ie_id")] int? institutionId,
             [FromHeader(Name = "couponId")] string? couponId)
         {
+            if (!institutionId.HasValue)
+            {
+                _logger.LogWarning("Request rejected: institutionId header is required");
+                return BadRequest(new { error = "Invalid request", message = "Invalid request" });
+            }
+
             try
             {
-                _logger.LogInformation("Getting courses for institution: {InstitutionId}, coupon: {CouponId}", 
-                    institutionId, couponId);
-                var courses = await _courseService.GetCoursesAsync(institutionId, couponId);
+                var courses = await _courseService.GetCoursesAsync(institutionId.Value, couponId);
                 return Ok(courses);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting courses");
+                _logger.LogError(ex, "Error getting courses for institution: {InstitutionId}, coupon: {CouponId}", institutionId, couponId);
                 return StatusCode(500, "Internal server error while fetching courses");
             }
         }

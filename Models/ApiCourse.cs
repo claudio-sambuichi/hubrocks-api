@@ -11,7 +11,7 @@ namespace HubRocksApi.Models
         public string Title { get; set; } = string.Empty;
         
         [JsonProperty("type")]
-        public string Type { get; set; } = string.Empty; // 'MBA' | 'POS' | 'CERT'
+        public string Type { get; set; } = string.Empty;
         
         [JsonProperty("category")]
         public string Category { get; set; } = string.Empty;

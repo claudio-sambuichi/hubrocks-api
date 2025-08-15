@@ -69,7 +69,6 @@ namespace HubRocksApi.Middleware
             }
 
             // Origin is valid, continue with the request
-            _logger.LogDebug("Allowed request from origin: {Origin}", origin);
             await _next(context);
         }
     }

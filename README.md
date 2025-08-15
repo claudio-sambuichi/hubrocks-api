@@ -17,8 +17,8 @@ A .NET 8 Web API that aggregates courses from multiple educational institutions 
 ### Courses
 - `GET /api/courses` - Get all courses from external API
 
-**Optional Headers:**
-- `ie_id`: Institution ID (optional, integer) - defaults to 1 if not provided
+**Headers:**
+- `ie_id`: Institution ID (required, integer) - must be provided
 - `couponId`: Coupon ID (optional, string) - for coupon-specific queries
 
 **Response Format:**
@@ -210,9 +210,10 @@ The API includes comprehensive error handling:
 
 ### API Usage Examples
 
-**Get all courses (default institution):**
+**Get all courses (institution required):**
 ```bash
-curl -X GET https://localhost:7289/api/courses
+curl -X GET https://localhost:7289/api/courses \
+  -H "ie_id: 1"
 ```
 
 **Get courses for specific institution:**
